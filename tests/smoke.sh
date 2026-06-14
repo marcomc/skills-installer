@@ -215,6 +215,79 @@ if os.path.abspath(fanout_target) != os.path.abspath(canonical):
     raise SystemExit("repaired fanout symlink does not point at canonical layer")
 PY
 
+wrong_target="${tmp_root}/wrong-target"
+mkdir -p "${wrong_target}"
+rm "${fanout_link}"
+ln -s "${wrong_target}" "${fanout_link}"
+
+fanout_conflict_config="${tmp_root}/fanout-conflict.conf"
+cat > "${fanout_conflict_config}" <<EOF
+canonical_dir = "~/.agents/skills"
+canonical_mode = "symlink"
+default_agents = ["codex", "openclaw"]
+
+[agent_targets]
+codex = "~/.codex/skills"
+openclaw = "~/.openclaw/skills"
+
+[[sources]]
+name = "fanout-conflict"
+source = "${src_dir}"
+include = ["my-test-skill"]
+agents = ["codex", "openclaw"]
+full_depth = true
+EOF
+
+if HOME="${home_dir}" "${repo_root}/install_external_agent_skills.sh" --config "${fanout_conflict_config}" --no-install >/dev/null 2>&1; then
+  fail "fanout conflict unexpectedly succeeded"
+fi
+openclaw_link="${home_dir}/.openclaw/skills/my-test-skill"
+test -L "${openclaw_link}" || fail "fanout conflict stopped before later agent target"
+
+canonical_conflict_source="${tmp_root}/canonical-conflict-source"
+canonical_conflict_a_dir="${canonical_conflict_source}/canonical-conflict-a"
+canonical_conflict_b_dir="${canonical_conflict_source}/canonical-conflict-b"
+mkdir -p "${canonical_conflict_a_dir}" "${canonical_conflict_b_dir}"
+cat > "${canonical_conflict_a_dir}/SKILL.md" <<'EOF'
+---
+name: canonical-conflict-a
+description: Canonical conflict smoke-test skill.
+---
+
+# Canonical Conflict A
+EOF
+cat > "${canonical_conflict_b_dir}/SKILL.md" <<'EOF'
+---
+name: canonical-conflict-b
+description: Canonical conflict smoke-test skill.
+---
+
+# Canonical Conflict B
+EOF
+ln -s "${wrong_target}" "${home_dir}/.agents/skills/canonical-conflict-a"
+
+canonical_conflict_config="${tmp_root}/canonical-conflict.conf"
+cat > "${canonical_conflict_config}" <<EOF
+canonical_dir = "~/.agents/skills"
+canonical_mode = "symlink"
+default_agents = ["codex"]
+
+[agent_targets]
+codex = "~/.codex/skills"
+
+[[sources]]
+name = "canonical-conflict"
+source = "${canonical_conflict_source}"
+include = ["*"]
+agents = ["codex"]
+full_depth = true
+EOF
+
+if HOME="${home_dir}" "${repo_root}/install_external_agent_skills.sh" --config "${canonical_conflict_config}" --no-link >/dev/null 2>&1; then
+  fail "canonical conflict unexpectedly succeeded"
+fi
+test -L "${home_dir}/.agents/skills/canonical-conflict-b" || fail "canonical conflict stopped before later skill"
+
 expanded_config="${tmp_root}/expanded-source.conf"
 cat > "${expanded_config}" <<'EOF'
 canonical_dir = "~/.agents/skills"

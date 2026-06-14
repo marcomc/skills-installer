@@ -25,3 +25,4 @@
 - Reject unsafe selected local skill names before using them as filesystem paths.
 - Limit local tree traversal when `full_depth = false`.
 - Preserve the previous canonical copy until replacement copy succeeds.
+- Keep processing remaining skills and agents after link conflicts.

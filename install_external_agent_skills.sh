@@ -220,6 +220,7 @@ ensure_canonical_symlink() {
   local canonical_skill_dir
   local link_target
   local link_status
+  local errexit_was_set=false
 
   canonical_skill_dir="${canonical_dir}/${skill_name}"
 
@@ -231,10 +232,13 @@ ensure_canonical_symlink() {
   run_cmd mkdir -p "${canonical_dir}"
 
   if [[ -L "${canonical_skill_dir}" ]]; then
+    if [[ $- == *e* ]]; then
+      errexit_was_set=true
+    fi
     set +e
     link_resolves_to "${canonical_skill_dir}" "${source_skill_dir}"
     link_status=$?
-    set -e
+    restore_errexit "${errexit_was_set}"
     if [[ "${link_status}" -eq 0 ]]; then
       log "canonical link ok: ${canonical_skill_dir}"
       return 0
@@ -266,6 +270,7 @@ ensure_skill_link() {
   local target_skill_dir
   local link_target
   local link_status
+  local errexit_was_set=false
 
   target_skill_dir="${target_base_dir}/${skill_name}"
 
@@ -277,10 +282,13 @@ ensure_skill_link() {
   run_cmd mkdir -p "${target_base_dir}"
 
   if [[ -L "${target_skill_dir}" ]]; then
+    if [[ $- == *e* ]]; then
+      errexit_was_set=true
+    fi
     set +e
     link_targets_path "${target_skill_dir}" "${canonical_skill_dir}"
     link_status=$?
-    set -e
+    restore_errexit "${errexit_was_set}"
     if [[ "${link_status}" -eq 0 ]]; then
       log "link ok: ${target_skill_dir}"
       return 0

@@ -967,7 +967,7 @@ install_canonical_copy() {
   if [[ "${copy_status}" -ne 0 ]] && [[ "${old_was_moved}" = true ]]; then
     run_cmd mv "${old_backup_dir}" "${canonical_skill_dir}"
   fi
-  if [[ -n "${replacement_parent:-}" ]]; then
+  if [[ "${DRY_RUN}" != true ]] && [[ -n "${replacement_parent:-}" ]]; then
     rm -rf "${replacement_parent}"
   fi
   if [[ "${copy_status}" -eq 0 ]] && [[ "${old_was_moved}" = true ]]; then

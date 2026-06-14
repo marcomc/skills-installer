@@ -29,3 +29,4 @@
 - Confine staged copy installs when agent-specific home environment variables
   are set.
 - Skip local `SKILL.md` files that lack required frontmatter.
+- Keep copy-mode dry runs from deleting existing deterministic temp paths.

@@ -365,12 +365,27 @@ if os.path.abspath(fanout_target) != os.path.abspath(canonical):
 PY
 
 printf 'old canonical copy\n' > "${copy_canonical}/SKILL.md"
-printf 'new source copy\n' > "${home_skill_dir}/SKILL.md"
+cat > "${home_skill_dir}/SKILL.md" <<'EOF'
+---
+name: copy-skill
+description: Updated source smoke-test skill.
+---
+
+# New Source Copy
+EOF
 if HOME="${home_dir}" MOCK_NPX_LAYOUT=canonical MOCK_CP_FAIL=1 "${repo_root}/install_external_agent_skills.sh" --config "${copy_install_config}" >/dev/null 2>&1; then
   fail "copy-mode replacement succeeded despite mocked cp failure"
 fi
 if ! grep -Fq 'old canonical copy' "${copy_canonical}/SKILL.md"; then
   fail "failed copy-mode replacement did not preserve old canonical copy"
+fi
+
+dry_run_temp_dir="${home_dir}/.agents/skills/.copy-skill.tmp.DRYRUN"
+mkdir -p "${dry_run_temp_dir}"
+printf 'keep dry-run temp\n' > "${dry_run_temp_dir}/sentinel"
+HOME="${home_dir}" "${repo_root}/install_external_agent_skills.sh" --config "${copy_install_config}" --dry-run >/dev/null
+if ! grep -Fq 'keep dry-run temp' "${dry_run_temp_dir}/sentinel"; then
+  fail "copy-mode dry-run removed existing deterministic temp directory"
 fi
 
 copy_false_config="${tmp_root}/copy-false.conf"

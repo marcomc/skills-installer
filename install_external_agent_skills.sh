@@ -632,6 +632,34 @@ def validate_skill_name(skill_name, source_path):
     )
 
 
+def shallow_allowed_child_names(relative_dir, has_skill_file):
+    if has_skill_file:
+        return set()
+    if relative_dir == ".":
+        return None
+
+    current_parts = relative_dir.split(os.sep)
+    for container in SHALLOW_SKILL_CONTAINERS:
+        container_parts = container.split(os.sep)
+        if current_parts == container_parts:
+            return None
+        if (
+            current_parts[: len(container_parts)] == container_parts
+            and len(current_parts) - len(container_parts) < 2
+        ):
+            return None
+
+    allowed_children = set()
+    for container in SHALLOW_SKILL_CONTAINERS:
+        container_parts = container.split(os.sep)
+        if (
+            container_parts[: len(current_parts)] == current_parts
+            and len(container_parts) > len(current_parts)
+        ):
+            allowed_children.add(container_parts[len(current_parts)])
+    return allowed_children
+
+
 def discover_tree_skills(root_dir, full_depth):
     if not full_depth and os.path.isfile(os.path.join(root_dir, "SKILL.md")):
         skill_file = os.path.join(root_dir, "SKILL.md")
@@ -649,14 +677,11 @@ def discover_tree_skills(root_dir, full_depth):
         ]
         relative_current_dir = os.path.relpath(current_dir, root_dir)
         if not full_depth and relative_current_dir != ".":
-            if relative_current_dir not in SHALLOW_SKILL_CONTAINERS:
-                current_parts = relative_current_dir.split(os.sep)
-                allowed_children = {
-                    container.split(os.sep)[len(current_parts)]
-                    for container in SHALLOW_SKILL_CONTAINERS
-                    if container.split(os.sep)[: len(current_parts)] == current_parts
-                    and len(container.split(os.sep)) > len(current_parts)
-                }
+            allowed_children = shallow_allowed_child_names(
+                relative_current_dir,
+                "SKILL.md" in file_names,
+            )
+            if allowed_children is not None:
                 dir_names[:] = [
                     name for name in dir_names if name in allowed_children
                 ]

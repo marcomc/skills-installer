@@ -659,8 +659,9 @@ shallow_source="${tmp_root}/shallow-source"
 shallow_direct_dir="${shallow_source}/direct-skill"
 shallow_container_dir="${shallow_source}/skills/container-skill"
 shallow_container_category_dir="${shallow_source}/skills/category/container-nested-skill"
+shallow_claude_dir="${shallow_source}/.claude/skills/claude-container-skill"
 shallow_nested_dir="${shallow_source}/category/nested-skill"
-mkdir -p "${shallow_direct_dir}" "${shallow_container_dir}" "${shallow_container_category_dir}" "${shallow_nested_dir}"
+mkdir -p "${shallow_direct_dir}" "${shallow_container_dir}" "${shallow_container_category_dir}" "${shallow_claude_dir}" "${shallow_nested_dir}"
 cat > "${shallow_direct_dir}/SKILL.md" <<'EOF'
 ---
 name: direct-skill
@@ -684,6 +685,14 @@ description: Container nested shallow smoke-test skill.
 ---
 
 # Container Nested Skill
+EOF
+cat > "${shallow_claude_dir}/SKILL.md" <<'EOF'
+---
+name: claude-container-skill
+description: Claude container shallow smoke-test skill.
+---
+
+# Claude Container Skill
 EOF
 cat > "${shallow_nested_dir}/SKILL.md" <<'EOF'
 ---
@@ -720,6 +729,7 @@ shallow_plan="$(
 printf '%s\n' "${shallow_plan}" | grep -Fq 'direct-skill' || fail "direct skill missing with full_depth=false"
 printf '%s\n' "${shallow_plan}" | grep -Fq 'container-skill' || fail "skills container skill missing with full_depth=false"
 printf '%s\n' "${shallow_plan}" | grep -Fq 'container-nested-skill' || fail "skills category container skill missing with full_depth=false"
+printf '%s\n' "${shallow_plan}" | grep -Fq 'claude-container-skill' || fail "agent-native container skill missing with full_depth=false"
 if printf '%s\n' "${shallow_plan}" | grep -Fq 'too-deep-skill'; then
   fail "nested category skill selected despite full_depth=false"
 fi

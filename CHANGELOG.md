@@ -34,3 +34,4 @@
 - Allow safe skill names containing spaces.
 - Parse current `skills@latest --list` indentation.
 - Keep walking standard skill containers when `full_depth = false`.
+- Include agent-native skill directories in shallow container discovery.

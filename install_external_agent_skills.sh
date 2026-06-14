@@ -345,10 +345,6 @@ import tempfile
 CONFIG_FILE = sys.argv[1]
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 SKILL_LINE_RE = re.compile(r"^\s*│(?: {2}| {4})([^ ].*?)\s*$")
-SHALLOW_SKILL_CONTAINERS = {
-    "skills",
-    os.path.join(".agents", "skills"),
-}
 
 DEFAULT_AGENT_TARGETS = {
     "codex": "~/.codex/skills",
@@ -362,6 +358,16 @@ DEFAULT_AGENT_TARGETS = {
     "opencode": "~/.config/opencode/skills",
     "antigravity": "~/.gemini/antigravity/skills",
     "antigravity-cli": "~/.gemini/antigravity-cli/skills",
+}
+
+SHALLOW_SKILL_CONTAINERS = {
+    "skills",
+    os.path.join(".agents", "skills"),
+    *{
+        path.replace("~/", "").strip("/")
+        for path in DEFAULT_AGENT_TARGETS.values()
+        if path.startswith("~/")
+    },
 }
 
 DEFAULT_AGENTS = [

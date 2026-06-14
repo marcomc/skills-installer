@@ -20,3 +20,5 @@
   canonical `~/.agents/skills` layer.
 - Require agent fanout symlinks to point at the canonical layer instead of only
   resolving to the same final source path.
+- Honor `XDG_CONFIG_HOME` in `make install`.
+- Use neutral placeholder GitHub sources in shipped examples.

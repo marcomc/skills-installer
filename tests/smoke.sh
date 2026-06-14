@@ -388,3 +388,18 @@ printf '%s\n' "${full_depth_plan}" | grep -Fq 'root-skill' || fail "root skill m
 if printf '%s\n' "${full_depth_plan}" | grep -Fq 'nested-skill'; then
   fail "nested skill selected despite root skill and full_depth=false"
 fi
+
+install_home="${tmp_root}/install-home"
+install_prefix="${tmp_root}/install-prefix"
+install_config_home="${tmp_root}/xdg-config"
+mkdir -p "${install_home}" "${install_prefix}" "${install_config_home}"
+
+HOME="${install_home}" \
+XDG_CONFIG_HOME="${install_config_home}" \
+make -C "${repo_root}" install PREFIX="${install_prefix}" >/dev/null
+
+test -x "${install_prefix}/bin/install_external_agent_skills.sh" || fail "make install did not install script"
+test -f "${install_config_home}/skills-installer/external-skills.conf" || fail "make install ignored XDG_CONFIG_HOME"
+if [[ -e "${install_home}/.config/skills-installer/external-skills.conf" ]]; then
+  fail "make install wrote config under HOME/.config despite XDG_CONFIG_HOME"
+fi

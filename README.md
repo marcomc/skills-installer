@@ -87,8 +87,8 @@ claude-code = "~/.claude/skills"
 openclaw = "~/.openclaw/skills"
 
 [[sources]]
-name = "marcomc-skills"
-source = "marcomc/skills"
+name = "team-skills"
+source = "example-org/team-skills"
 canonical_mode = "copy"
 include = ["*"]
 exclude = ["personal", "in-progress", "deprecated"]
@@ -96,7 +96,7 @@ exclude_paths = ["personal", "in-progress", "deprecated"]
 full_depth = true
 
 [[sources]]
-name = "local-marcomc-skills-dev"
+name = "local-skills-dev"
 source = "/path/to/local/skills"
 canonical_mode = "symlink"
 include = ["*"]
@@ -106,7 +106,8 @@ full_depth = true
 ```
 
 `source` accepts the same source formats supported by `skills add`, including
-GitHub shorthand such as `marcomc/skills`, full Git URLs, and local directories.
+GitHub shorthand such as `example-org/team-skills`, full Git URLs, and local
+directories.
 
 `include`, `exclude`, and `exclude_paths` support exact names and shell-style
 globs. When the source can be inspected as a local or cloneable Git repository,
@@ -127,8 +128,8 @@ Each source can choose how entries under `~/.agents/skills` are managed:
 
 ```toml
 [[sources]]
-name = "marcomc-skills-local-link"
-source = "marcomc/skills"
+name = "team-skills-local-link"
+source = "example-org/team-skills"
 link_source = "/path/to/local/skills"
 canonical_mode = "symlink"
 include = ["*"]

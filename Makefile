@@ -1,5 +1,5 @@
 PREFIX ?= $(HOME)/.local
-CONFIG_HOME ?= $(HOME)/.config
+CONFIG_HOME ?= $(if $(XDG_CONFIG_HOME),$(XDG_CONFIG_HOME),$(HOME)/.config)
 INSTALL ?= install
 MARKDOWNLINT_CONFIG ?= .markdownlint.json
 

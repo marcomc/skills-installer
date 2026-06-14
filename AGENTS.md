@@ -8,7 +8,7 @@ Follow `~/AGENTS.md` first. This file adds project-local rules for the
 - Read `README.md`, `Makefile`, and the touched script or test before editing.
 - Keep changes scoped to `install_external_agent_skills.sh`, `config/`, `tests/`,
   and matching docs.
-- Before handoff, run `markdownlint --config /Users/mmassari/.markdownlint.json`
+- Before handoff, run `markdownlint --config "$HOME/.markdownlint.json"`
   on edited Markdown files and `shellcheck --enable=all` on edited shell files.
 - If you materially edit `README.md`, refresh its table of contents.
 

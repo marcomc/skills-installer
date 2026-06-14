@@ -607,6 +607,9 @@ def discover_tree_skills(root_dir, full_depth):
             for name in dir_names
             if name not in {".git", ".hg", ".svn", "node_modules", "__pycache__"}
         ]
+        if not full_depth and os.path.relpath(current_dir, root_dir) != ".":
+            dir_names[:] = []
+
         if "SKILL.md" not in file_names:
             continue
 
@@ -863,8 +866,12 @@ install_canonical_copy() {
   local temp_agent_skill_dir
   local staged_skill_dir
   local canonical_skill_dir
+  local replacement_parent
+  local replacement_skill_dir
+  local old_backup_dir
   local install_status
   local copy_status=0
+  local old_was_moved=false
   local errexit_was_set=false
 
   temp_home="$(mktemp -d)"
@@ -901,13 +908,37 @@ install_canonical_copy() {
 
   run_cmd mkdir -p "${canonical_dir}"
   copy_status=$?
-  if [[ "${copy_status}" -eq 0 ]] && { [[ -e "${canonical_skill_dir}" ]] || [[ -L "${canonical_skill_dir}" ]]; }; then
-    run_cmd rm -rf "${canonical_skill_dir}"
-    copy_status=$?
+  if [[ "${copy_status}" -eq 0 ]]; then
+    if [[ "${DRY_RUN}" = true ]]; then
+      replacement_parent="${canonical_dir}/.${skill_name}.tmp.DRYRUN"
+    else
+      replacement_parent="$(mktemp -d "${canonical_dir}/.${skill_name}.tmp.XXXXXX")"
+      copy_status=$?
+    fi
   fi
   if [[ "${copy_status}" -eq 0 ]]; then
-    run_cmd cp -R "${staged_skill_dir}" "${canonical_skill_dir}"
+    replacement_skill_dir="${replacement_parent}/${skill_name}"
+    run_cmd cp -R "${staged_skill_dir}" "${replacement_skill_dir}"
     copy_status=$?
+  fi
+  if [[ "${copy_status}" -eq 0 ]] && { [[ -e "${canonical_skill_dir}" ]] || [[ -L "${canonical_skill_dir}" ]]; }; then
+    old_backup_dir="${canonical_skill_dir}.backup.${BACKUP_STAMP}.$$"
+    run_cmd mv "${canonical_skill_dir}" "${old_backup_dir}"
+    copy_status=$?
+    [[ "${copy_status}" -eq 0 ]] && old_was_moved=true
+  fi
+  if [[ "${copy_status}" -eq 0 ]]; then
+    run_cmd mv "${replacement_skill_dir}" "${canonical_skill_dir}"
+    copy_status=$?
+  fi
+  if [[ "${copy_status}" -ne 0 ]] && [[ "${old_was_moved}" = true ]]; then
+    run_cmd mv "${old_backup_dir}" "${canonical_skill_dir}"
+  fi
+  if [[ -n "${replacement_parent:-}" ]]; then
+    rm -rf "${replacement_parent}"
+  fi
+  if [[ "${copy_status}" -eq 0 ]] && [[ "${old_was_moved}" = true ]]; then
+    run_cmd rm -rf "${old_backup_dir}"
   fi
 
   rm -rf "${temp_home}"

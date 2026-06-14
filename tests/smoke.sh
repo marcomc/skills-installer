@@ -109,9 +109,20 @@ esac
 printf '%s\n' "${HOME}" >> "${MOCK_NPX_LOG}"
 mkdir -p "${target_base}"
 rm -rf "${target_base:?}/${skill_name}"
-cp -R "${source_dir}/${skill_name}" "${target_base}/${skill_name}"
+/bin/cp -R "${source_dir}/${skill_name}" "${target_base}/${skill_name}"
 EOF
-chmod +x "${bin_dir}/npx"
+cat > "${bin_dir}/cp" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ "${MOCK_CP_FAIL:-0}" = 1 ]]; then
+  printf 'mock cp failure\n' >&2
+  exit 73
+fi
+
+/bin/cp "$@"
+EOF
+chmod +x "${bin_dir}/npx" "${bin_dir}/cp"
 export MOCK_NPX_LOG="${mock_npx_log}"
 export PATH="${bin_dir}:${PATH}"
 
@@ -275,6 +286,15 @@ if os.path.abspath(fanout_target) != os.path.abspath(canonical):
     raise SystemExit("copy fanout symlink does not point at canonical layer")
 PY
 
+printf 'old canonical copy\n' > "${copy_canonical}/SKILL.md"
+printf 'new source copy\n' > "${home_skill_dir}/SKILL.md"
+if HOME="${home_dir}" MOCK_NPX_LAYOUT=canonical MOCK_CP_FAIL=1 "${repo_root}/install_external_agent_skills.sh" --config "${copy_install_config}" >/dev/null 2>&1; then
+  fail "copy-mode replacement succeeded despite mocked cp failure"
+fi
+if ! grep -Fq 'old canonical copy' "${copy_canonical}/SKILL.md"; then
+  fail "failed copy-mode replacement did not preserve old canonical copy"
+fi
+
 copy_false_config="${tmp_root}/copy-false.conf"
 cat > "${copy_false_config}" <<EOF
 canonical_dir = "~/.agents/skills"
@@ -424,6 +444,55 @@ filtered_plan="$(
 printf '%s\n' "${filtered_plan}" | grep -Fq 'safe-skill' || fail "filtered safe skill missing"
 if printf '%s\n' "${filtered_plan}" | grep -Fq 'excluded-skill'; then
   fail "excluded unsafe skill appeared in plan"
+fi
+
+shallow_source="${tmp_root}/shallow-source"
+shallow_direct_dir="${shallow_source}/direct-skill"
+shallow_nested_dir="${shallow_source}/category/nested-skill"
+mkdir -p "${shallow_direct_dir}" "${shallow_nested_dir}"
+cat > "${shallow_direct_dir}/SKILL.md" <<'EOF'
+---
+name: direct-skill
+description: Direct shallow smoke-test skill.
+---
+
+# Direct Skill
+EOF
+cat > "${shallow_nested_dir}/SKILL.md" <<'EOF'
+---
+name: too-deep-skill
+description: Too-deep shallow smoke-test skill.
+---
+
+# Too Deep Skill
+EOF
+
+shallow_config="${tmp_root}/shallow.conf"
+cat > "${shallow_config}" <<EOF
+canonical_dir = "~/.agents/skills"
+canonical_mode = "symlink"
+default_agents = ["codex"]
+full_depth = false
+
+[agent_targets]
+codex = "~/.codex/skills"
+
+[[sources]]
+name = "shallow"
+source = "${shallow_source}"
+include = ["*"]
+agents = ["codex"]
+EOF
+
+shallow_plan="$(
+  HOME="${home_dir}" \
+  "${repo_root}/install_external_agent_skills.sh" \
+    --config "${shallow_config}" \
+    --list-plan
+)"
+printf '%s\n' "${shallow_plan}" | grep -Fq 'direct-skill' || fail "direct skill missing with full_depth=false"
+if printf '%s\n' "${shallow_plan}" | grep -Fq 'too-deep-skill'; then
+  fail "nested category skill selected despite full_depth=false"
 fi
 
 full_depth_source="${tmp_root}/full-depth-source"

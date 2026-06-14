@@ -13,3 +13,10 @@
 - Document installer workflow and link topology with Mermaid diagrams.
 - Add a no-network smoke test for symlink-mode planning and fanout.
 - Document runtime requirements and script options.
+
+### Fixed
+
+- Stage copy-mode installs in a temporary HOME before copying skills into the
+  canonical `~/.agents/skills` layer.
+- Require agent fanout symlinks to point at the canonical layer instead of only
+  resolving to the same final source path.

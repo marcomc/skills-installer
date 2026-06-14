@@ -16,14 +16,16 @@ fail() {
 
 src_dir="${tmp_root}/source"
 home_dir="${tmp_root}/home"
+bin_dir="${tmp_root}/bin"
 config_file="${tmp_root}/external-skills.conf"
 skill_dir="${src_dir}/my-test-skill"
 literal_source="${tmp_root}/\$(touch pwned)"
 literal_skill_dir="${literal_source}/literal-skill"
 home_source_dir="${home_dir}/copy-source"
 home_skill_dir="${home_source_dir}/copy-skill"
+mock_npx_log="${tmp_root}/npx.log"
 
-mkdir -p "${skill_dir}" "${home_dir}" "${literal_skill_dir}" "${home_skill_dir}"
+mkdir -p "${skill_dir}" "${home_dir}" "${literal_skill_dir}" "${home_skill_dir}" "${bin_dir}"
 cat > "${skill_dir}/SKILL.md" <<'EOF'
 ---
 name: my-test-skill
@@ -48,6 +50,70 @@ description: Expanded source smoke-test skill.
 
 # Copy Skill
 EOF
+cat > "${bin_dir}/npx" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+source_dir=""
+skill_name=""
+agent_name=""
+copy_mode=false
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    add)
+      shift
+      source_dir="${1:-}"
+      ;;
+    --agent)
+      shift
+      agent_name="${1:-}"
+      ;;
+    --skill)
+      shift
+      skill_name="${1:-}"
+      ;;
+    --copy)
+      copy_mode=true
+      ;;
+  esac
+  shift || true
+done
+
+if [[ "${copy_mode}" != true ]] || [[ -z "${source_dir}" ]] || [[ -z "${skill_name}" ]]; then
+  printf 'mock npx only supports skills add --copy with --skill\n' >&2
+  exit 2
+fi
+
+case "${MOCK_NPX_LAYOUT:-agent}" in
+  canonical)
+    target_base="${HOME}/.agents/skills"
+    ;;
+  agent)
+    case "${agent_name}" in
+      codex)
+        target_base="${HOME}/.codex/skills"
+        ;;
+      *)
+        printf 'unsupported mock agent: %s\n' "${agent_name}" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  *)
+    printf 'unsupported mock layout: %s\n' "${MOCK_NPX_LAYOUT}" >&2
+    exit 2
+    ;;
+esac
+
+printf '%s\n' "${HOME}" >> "${MOCK_NPX_LOG}"
+mkdir -p "${target_base}"
+rm -rf "${target_base:?}/${skill_name}"
+cp -R "${source_dir}/${skill_name}" "${target_base}/${skill_name}"
+EOF
+chmod +x "${bin_dir}/npx"
+export MOCK_NPX_LOG="${mock_npx_log}"
+export PATH="${bin_dir}:${PATH}"
 
 cat > "${config_file}" <<EOF
 canonical_dir = "~/.agents/skills"
@@ -112,6 +178,32 @@ if os.path.abspath(fanout_target) != os.path.abspath(canonical):
     raise SystemExit("fanout symlink does not point at canonical layer")
 PY
 
+rm "${fanout_link}"
+ln -s "${skill_dir}" "${fanout_link}"
+
+HOME="${home_dir}" \
+SKILLS_INSTALLER_FORCE_MINIMAL_TOML=1 \
+"${repo_root}/install_external_agent_skills.sh" \
+  --config "${config_file}" \
+  --no-install \
+  --force-links
+
+python3 - "${canonical_link}" "${fanout_link}" <<'PY'
+import os
+import sys
+
+canonical, fanout = sys.argv[1:]
+
+if not os.path.islink(fanout):
+    raise SystemExit(f"{fanout} is not a symlink")
+
+fanout_target = os.readlink(fanout)
+if not os.path.isabs(fanout_target):
+    fanout_target = os.path.abspath(os.path.join(os.path.dirname(fanout), fanout_target))
+if os.path.abspath(fanout_target) != os.path.abspath(canonical):
+    raise SystemExit("repaired fanout symlink does not point at canonical layer")
+PY
+
 expanded_config="${tmp_root}/expanded-source.conf"
 cat > "${expanded_config}" <<'EOF'
 canonical_dir = "~/.agents/skills"
@@ -135,6 +227,53 @@ expanded_plan="$(
     --list-plan
 )"
 printf '%s\n' "${expanded_plan}" | grep -Fq "${home_source_dir}" || fail "local copy source was not expanded"
+
+copy_install_config="${tmp_root}/copy-install.conf"
+cat > "${copy_install_config}" <<EOF
+canonical_dir = "~/.agents/skills"
+canonical_mode = "copy"
+default_agents = ["codex"]
+
+[agent_targets]
+codex = "~/.codex/skills"
+
+[[sources]]
+name = "copy-install"
+source = "${home_source_dir}"
+include = ["copy-skill"]
+agents = ["codex"]
+EOF
+
+HOME="${home_dir}" MOCK_NPX_LAYOUT=agent "${repo_root}/install_external_agent_skills.sh" --config "${copy_install_config}"
+HOME="${home_dir}" MOCK_NPX_LAYOUT=canonical "${repo_root}/install_external_agent_skills.sh" --config "${copy_install_config}"
+if grep -Fxq "${home_dir}" "${mock_npx_log}"; then
+  fail "copy-mode install used the real HOME instead of a temporary HOME"
+fi
+
+copy_canonical="${home_dir}/.agents/skills/copy-skill"
+copy_fanout="${home_dir}/.codex/skills/copy-skill"
+
+python3 - "${home_skill_dir}" "${copy_canonical}" "${copy_fanout}" <<'PY'
+import os
+import sys
+
+source, canonical, fanout = sys.argv[1:]
+
+if not os.path.isdir(canonical) or os.path.islink(canonical):
+    raise SystemExit("canonical copy is not a real directory")
+if os.path.realpath(canonical) == os.path.realpath(source):
+    raise SystemExit("canonical copy resolves to source instead of a copied directory")
+if not os.path.isfile(os.path.join(canonical, "SKILL.md")):
+    raise SystemExit("canonical copy is missing SKILL.md")
+if not os.path.islink(fanout):
+    raise SystemExit("copy fanout is not a symlink")
+
+fanout_target = os.readlink(fanout)
+if not os.path.isabs(fanout_target):
+    fanout_target = os.path.abspath(os.path.join(os.path.dirname(fanout), fanout_target))
+if os.path.abspath(fanout_target) != os.path.abspath(canonical):
+    raise SystemExit("copy fanout symlink does not point at canonical layer")
+PY
 
 copy_false_config="${tmp_root}/copy-false.conf"
 cat > "${copy_false_config}" <<EOF

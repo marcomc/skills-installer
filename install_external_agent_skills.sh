@@ -98,7 +98,7 @@ parse_args() {
   done
 }
 
-link_points_to() {
+link_resolves_to() {
   local link_path="$1"
   local expected_target="$2"
 
@@ -119,6 +119,33 @@ if not os.path.isabs(actual_target):
     )
 
 if os.path.realpath(actual_target) == os.path.realpath(expected_target):
+    sys.exit(0)
+
+sys.exit(1)
+PY
+}
+
+link_targets_path() {
+  local link_path="$1"
+  local expected_target="$2"
+
+  python3 - "${link_path}" "${expected_target}" <<'PY'
+import os
+import sys
+
+link_path = sys.argv[1]
+expected_target = sys.argv[2]
+
+if not os.path.islink(link_path):
+    sys.exit(1)
+
+actual_target = os.readlink(link_path)
+if not os.path.isabs(actual_target):
+    actual_target = os.path.abspath(
+        os.path.join(os.path.dirname(link_path), actual_target)
+    )
+
+if os.path.abspath(actual_target) == os.path.abspath(expected_target):
     sys.exit(0)
 
 sys.exit(1)
@@ -151,6 +178,41 @@ backup_existing_target() {
   run_cmd mv "${target_skill_dir}" "${backup_dir}"
 }
 
+run_cmd_with_home() {
+  local home_dir="$1"
+  shift
+
+  if [[ "${DRY_RUN}" = true ]]; then
+    printf '+ HOME=%q' "${home_dir}"
+    printf ' %q' "$@"
+    printf '\n'
+  else
+    HOME="${home_dir}" "$@"
+  fi
+}
+
+expand_path_for_home() {
+  local raw_path="$1"
+  local home_dir="$2"
+
+  HOME="${home_dir}" python3 - "${raw_path}" <<'PY'
+import os
+import sys
+
+print(os.path.abspath(os.path.expandvars(os.path.expanduser(sys.argv[1]))))
+PY
+}
+
+restore_errexit() {
+  local was_set="$1"
+
+  if [[ "${was_set}" = true ]]; then
+    set -e
+  else
+    set +e
+  fi
+}
+
 ensure_canonical_symlink() {
   local source_skill_dir="$1"
   local canonical_dir="$2"
@@ -170,7 +232,7 @@ ensure_canonical_symlink() {
 
   if [[ -L "${canonical_skill_dir}" ]]; then
     set +e
-    link_points_to "${canonical_skill_dir}" "${source_skill_dir}"
+    link_resolves_to "${canonical_skill_dir}" "${source_skill_dir}"
     link_status=$?
     set -e
     if [[ "${link_status}" -eq 0 ]]; then
@@ -216,7 +278,7 @@ ensure_skill_link() {
 
   if [[ -L "${target_skill_dir}" ]]; then
     set +e
-    link_points_to "${target_skill_dir}" "${canonical_skill_dir}"
+    link_targets_path "${target_skill_dir}" "${canonical_skill_dir}"
     link_status=$?
     set -e
     if [[ "${link_status}" -eq 0 ]]; then
@@ -668,6 +730,12 @@ def make_plan(config):
                 "use canonical_mode = 'symlink' for canonical symlinks"
             )
         source_installer_agent = str(source_config.get("installer_agent", installer_agent))
+        source_installer_target = DEFAULT_AGENT_TARGETS.get(source_installer_agent)
+        if canonical_mode == "copy" and not source_installer_target:
+            raise SystemExit(
+                "error: copy mode requires installer_agent to be one of: "
+                f"{', '.join(sorted(DEFAULT_AGENT_TARGETS))}"
+            )
         include = normalize_list(source_config.get("include"), ["*"])
         exclude = normalize_list(source_config.get("exclude"), [])
         exclude_paths = normalize_list(source_config.get("exclude_paths"), [])
@@ -718,6 +786,7 @@ def make_plan(config):
                     ",".join(extra_args),
                     canonical_dir,
                     source_installer_agent,
+                    source_installer_target or "",
                     canonical_mode,
                     source_skill_dir,
                 ]
@@ -735,13 +804,14 @@ for row in make_plan(config):
 PY
 }
 
-install_skill() {
-  local skill_source="$1"
-  local skill_name="$2"
-  local full_depth="$3"
-  local copy_files="$4"
-  local extra_args_csv="$5"
-  local installer_agent="$6"
+run_npx_add_skill() {
+  local home_dir="$1"
+  local skill_source="$2"
+  local skill_name="$3"
+  local full_depth="$4"
+  local copy_files="$5"
+  local extra_args_csv="$6"
+  local installer_agent="$7"
   local cmd
   local extra_args
   local extra_arg
@@ -761,7 +831,77 @@ install_skill() {
     done
   fi
 
-  run_cmd "${cmd[@]}"
+  if [[ -n "${home_dir}" ]]; then
+    run_cmd_with_home "${home_dir}" "${cmd[@]}"
+  else
+    run_cmd "${cmd[@]}"
+  fi
+}
+
+install_canonical_copy() {
+  local skill_source="$1"
+  local skill_name="$2"
+  local full_depth="$3"
+  local extra_args_csv="$4"
+  local installer_agent="$5"
+  local installer_target_template="$6"
+  local canonical_dir="$7"
+  local temp_home
+  local temp_canonical_skill_dir
+  local temp_target_base
+  local temp_agent_skill_dir
+  local staged_skill_dir
+  local canonical_skill_dir
+  local install_status
+  local copy_status=0
+  local errexit_was_set=false
+
+  temp_home="$(mktemp -d)"
+
+  if [[ $- == *e* ]]; then
+    errexit_was_set=true
+  fi
+
+  set +e
+  run_npx_add_skill "${temp_home}" "${skill_source}" "${skill_name}" "${full_depth}" true "${extra_args_csv}" "${installer_agent}"
+  install_status=$?
+
+  if [[ "${install_status}" -ne 0 ]]; then
+    rm -rf "${temp_home}"
+    restore_errexit "${errexit_was_set}"
+    return "${install_status}"
+  fi
+
+  temp_canonical_skill_dir="${temp_home}/.agents/skills/${skill_name}"
+  temp_target_base="$(expand_path_for_home "${installer_target_template}" "${temp_home}")"
+  temp_agent_skill_dir="${temp_target_base}/${skill_name}"
+  canonical_skill_dir="${canonical_dir}/${skill_name}"
+  staged_skill_dir="${temp_canonical_skill_dir}"
+  if [[ "${DRY_RUN}" != true ]] && [[ ! -d "${staged_skill_dir}" ]] && [[ -d "${temp_agent_skill_dir}" ]]; then
+    staged_skill_dir="${temp_agent_skill_dir}"
+  fi
+
+  if [[ "${DRY_RUN}" != true ]] && [[ ! -d "${staged_skill_dir}" ]]; then
+    warn "installer did not create expected skill copy: ${temp_canonical_skill_dir} or ${temp_agent_skill_dir}"
+    rm -rf "${temp_home}"
+    restore_errexit "${errexit_was_set}"
+    return 1
+  fi
+
+  run_cmd mkdir -p "${canonical_dir}"
+  copy_status=$?
+  if [[ "${copy_status}" -eq 0 ]] && { [[ -e "${canonical_skill_dir}" ]] || [[ -L "${canonical_skill_dir}" ]]; }; then
+    run_cmd rm -rf "${canonical_skill_dir}"
+    copy_status=$?
+  fi
+  if [[ "${copy_status}" -eq 0 ]]; then
+    run_cmd cp -R "${staged_skill_dir}" "${canonical_skill_dir}"
+    copy_status=$?
+  fi
+
+  rm -rf "${temp_home}"
+  restore_errexit "${errexit_was_set}"
+  return "${copy_status}"
 }
 
 show_plan() {
@@ -775,10 +915,11 @@ show_plan() {
   local extra_args_csv
   local canonical_dir
   local installer_agent
+  local installer_target_template
   local canonical_mode
   local source_skill_dir
 
-  while IFS=$'\037' read -r skill_source skill_name agents_csv target_specs full_depth copy_files extra_args_csv canonical_dir installer_agent canonical_mode source_skill_dir; do
+  while IFS=$'\037' read -r skill_source skill_name agents_csv target_specs full_depth copy_files extra_args_csv canonical_dir installer_agent installer_target_template canonical_mode source_skill_dir; do
     printf '%s\t%s\tagents=%s\tcanonical=%s\tmode=%s\tinstaller_agent=%s\tcopy=%s\tfull_depth=%s\ttargets=%s\textra_args=%s\tsource_skill_dir=%s\n' \
       "${skill_source}" \
       "${skill_name}" \
@@ -805,6 +946,7 @@ process_plan() {
   local extra_args_csv
   local canonical_dir
   local installer_agent
+  local installer_target_template
   local canonical_mode
   local source_skill_dir
   local canonical_skill_dir
@@ -816,7 +958,7 @@ process_plan() {
   local install_status
   local link_status
 
-  while IFS=$'\037' read -r skill_source skill_name agents_csv target_specs full_depth copy_files extra_args_csv canonical_dir installer_agent canonical_mode source_skill_dir; do
+  while IFS=$'\037' read -r skill_source skill_name agents_csv target_specs full_depth copy_files extra_args_csv canonical_dir installer_agent installer_target_template canonical_mode source_skill_dir; do
     [[ -n "${skill_source}" ]] || continue
 
     log "skill: ${skill_name} (${skill_source}, ${canonical_mode})"
@@ -825,10 +967,16 @@ process_plan() {
       set +e
       if [[ "${canonical_mode}" = symlink ]]; then
         ensure_canonical_symlink "${source_skill_dir}" "${canonical_dir}" "${skill_name}"
+        install_status=$?
       else
-        install_skill "${skill_source}" "${skill_name}" "${full_depth}" "${copy_files}" "${extra_args_csv}" "${installer_agent}"
+        if [[ "${copy_files}" != true ]]; then
+          warn "copy mode requires copy=true for ${skill_name}"
+          install_status=1
+        else
+          install_canonical_copy "${skill_source}" "${skill_name}" "${full_depth}" "${extra_args_csv}" "${installer_agent}" "${installer_target_template}" "${canonical_dir}"
+          install_status=$?
+        fi
       fi
-      install_status=$?
       set -e
       if [[ "${install_status}" -ne 0 ]]; then
         failures=$((failures + 1))

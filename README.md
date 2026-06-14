@@ -119,7 +119,7 @@ Each source can choose how entries under `~/.agents/skills` are managed:
 
 | Mode | Behavior | Use For |
 | --- | --- | --- |
-| `copy` | Runs `npx --yes skills@latest add ... --global --copy`. | Remote/public repos and stable third-party skills. |
+| `copy` | Stages `npx --yes skills@latest add ... --global --copy` in a temporary HOME, copies the result into `~/.agents/skills`, then links agents from there. | Remote/public repos and stable third-party skills. |
 | `symlink` | Creates `~/.agents/skills/<skill>` as a symlink to a local source skill dir. | Local development checkouts you edit directly. |
 
 `symlink` requires `source` to be a local directory, or a separate local
@@ -151,9 +151,10 @@ flowchart LR
   config["Read TOML config"] --> plan["Build selected skill plan"]
   plan --> source["Process each source skill"]
   source --> mode{"canonical_mode?"}
-  mode -->|copy| copy["Run npx skills add --copy"]
+  mode -->|copy| copy["Stage npx skills add --copy in temp HOME"]
+  copy --> copyCanonical["Copy staged skill into ~/.agents/skills"]
   mode -->|symlink| symlink["Link canonical skill to local source"]
-  copy --> canonical["Ensure ~/.agents/skills entry"]
+  copyCanonical --> canonical["Ensure ~/.agents/skills entry"]
   symlink --> canonical
   canonical --> fanout["Create or verify fanout symlinks"]
   fanout --> targets["Configured agent skill directories"]
@@ -213,8 +214,9 @@ sources before agent-specific links are created.
 flowchart TB
   accTitle: Skills link topology
   accDescr: Shows copy and symlink source modes converging on the shared ~/.agents/skills layer before fanout to agent-specific directories.
-  remote["Remote compatible skills source"] --> npx["npx skills add --global --copy"]
-  npx --> canonical["~/.agents/skills/<skill>"]
+  remote["Remote compatible skills source"] --> npx["npx skills add --global --copy in temp HOME"]
+  npx --> staged["Temporary agent skill copy"]
+  staged --> canonical["~/.agents/skills/<skill>"]
   local["Local skills repo/<skill>"] --> localLink["Create canonical symlink"]
   localLink --> canonical
   canonical --> codex["~/.codex/skills/<skill>"]

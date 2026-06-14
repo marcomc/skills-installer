@@ -92,7 +92,7 @@ case "${MOCK_NPX_LAYOUT:-agent}" in
   agent)
     case "${agent_name}" in
       codex)
-        target_base="${HOME}/.codex/skills"
+        target_base="${CODEX_HOME:-${HOME}/.codex}/skills"
         ;;
       *)
         printf 'unsupported mock agent: %s\n' "${agent_name}" >&2
@@ -107,6 +107,7 @@ case "${MOCK_NPX_LAYOUT:-agent}" in
 esac
 
 printf '%s\n' "${HOME}" >> "${MOCK_NPX_LOG}"
+printf 'CODEX_HOME=%s\n' "${CODEX_HOME:-}" >> "${MOCK_NPX_LOG}"
 mkdir -p "${target_base}"
 rm -rf "${target_base:?}/${skill_name}"
 /bin/cp -R "${source_dir}/${skill_name}" "${target_base}/${skill_name}"
@@ -328,10 +329,14 @@ include = ["copy-skill"]
 agents = ["codex"]
 EOF
 
-HOME="${home_dir}" MOCK_NPX_LAYOUT=agent "${repo_root}/install_external_agent_skills.sh" --config "${copy_install_config}"
+real_codex_home="${tmp_root}/real-codex-home"
+HOME="${home_dir}" CODEX_HOME="${real_codex_home}" MOCK_NPX_LAYOUT=agent "${repo_root}/install_external_agent_skills.sh" --config "${copy_install_config}"
 HOME="${home_dir}" MOCK_NPX_LAYOUT=canonical "${repo_root}/install_external_agent_skills.sh" --config "${copy_install_config}"
 if grep -Fxq "${home_dir}" "${mock_npx_log}"; then
   fail "copy-mode install used the real HOME instead of a temporary HOME"
+fi
+if [[ -e "${real_codex_home}/skills/copy-skill" ]]; then
+  fail "copy-mode install wrote to real CODEX_HOME"
 fi
 
 copy_canonical="${home_dir}/.agents/skills/copy-skill"
@@ -517,6 +522,49 @@ filtered_plan="$(
 printf '%s\n' "${filtered_plan}" | grep -Fq 'safe-skill' || fail "filtered safe skill missing"
 if printf '%s\n' "${filtered_plan}" | grep -Fq 'excluded-skill'; then
   fail "excluded unsafe skill appeared in plan"
+fi
+
+invalid_frontmatter_source="${tmp_root}/invalid-frontmatter-source"
+invalid_frontmatter_valid_dir="${invalid_frontmatter_source}/valid-skill"
+invalid_frontmatter_invalid_dir="${invalid_frontmatter_source}/invalid-skill"
+mkdir -p "${invalid_frontmatter_valid_dir}" "${invalid_frontmatter_invalid_dir}"
+cat > "${invalid_frontmatter_valid_dir}/SKILL.md" <<'EOF'
+---
+name: valid-frontmatter-skill
+description: Valid frontmatter smoke-test skill.
+---
+
+# Valid Frontmatter Skill
+EOF
+cat > "${invalid_frontmatter_invalid_dir}/SKILL.md" <<'EOF'
+# Invalid Frontmatter Skill
+EOF
+
+invalid_frontmatter_config="${tmp_root}/invalid-frontmatter.conf"
+cat > "${invalid_frontmatter_config}" <<EOF
+canonical_dir = "~/.agents/skills"
+canonical_mode = "symlink"
+default_agents = ["codex"]
+
+[agent_targets]
+codex = "~/.codex/skills"
+
+[[sources]]
+name = "invalid-frontmatter"
+source = "${invalid_frontmatter_source}"
+include = ["*"]
+agents = ["codex"]
+EOF
+
+invalid_frontmatter_plan="$(
+  HOME="${home_dir}" \
+  "${repo_root}/install_external_agent_skills.sh" \
+    --config "${invalid_frontmatter_config}" \
+    --list-plan
+)"
+printf '%s\n' "${invalid_frontmatter_plan}" | grep -Fq 'valid-frontmatter-skill' || fail "valid frontmatter skill missing"
+if printf '%s\n' "${invalid_frontmatter_plan}" | grep -Fq 'invalid-skill'; then
+  fail "invalid frontmatter SKILL.md appeared in plan"
 fi
 
 shallow_source="${tmp_root}/shallow-source"

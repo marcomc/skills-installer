@@ -26,3 +26,6 @@
 - Limit local tree traversal when `full_depth = false`.
 - Preserve the previous canonical copy until replacement copy succeeds.
 - Keep processing remaining skills and agents after link conflicts.
+- Confine staged copy installs when agent-specific home environment variables
+  are set.
+- Skip local `SKILL.md` files that lack required frontmatter.

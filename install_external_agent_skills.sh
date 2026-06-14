@@ -180,14 +180,30 @@ backup_existing_target() {
 
 run_cmd_with_home() {
   local home_dir="$1"
+  local config_home
+  local env_vars
   shift
 
+  config_home="${home_dir}/.config"
+  env_vars=(
+    HOME="${home_dir}"
+    XDG_CONFIG_HOME="${config_home}"
+    FLATPAK_XDG_CONFIG_HOME="${config_home}"
+    APPDATA="${config_home}"
+    CODEX_HOME="${home_dir}/.codex"
+    CLAUDE_CONFIG_DIR="${home_dir}/.claude"
+    VIBE_HOME="${home_dir}/.vibe"
+    HERMES_HOME="${home_dir}/.hermes"
+    AUTOHAND_HOME="${home_dir}/.autohand"
+  )
+
   if [[ "${DRY_RUN}" = true ]]; then
-    printf '+ HOME=%q' "${home_dir}"
+    printf '+ env'
+    printf ' %q' "${env_vars[@]}"
     printf ' %q' "$@"
     printf '\n'
   else
-    HOME="${home_dir}" "$@"
+    env "${env_vars[@]}" "$@"
   fi
 }
 
@@ -576,7 +592,8 @@ def materialized_source(source):
         yield checkout_dir
 
 
-def read_skill_name(skill_file, fallback):
+def read_skill_name(skill_file):
+    frontmatter = {}
     in_frontmatter = False
     with open(skill_file, "r", encoding="utf-8") as handle:
         for raw_line in handle:
@@ -586,11 +603,15 @@ def read_skill_name(skill_file, fallback):
                     in_frontmatter = True
                     continue
                 break
-            if in_frontmatter and line.startswith("name:"):
-                name = line.split(":", 1)[1].strip().strip("'\"")
-                if name:
-                    return name
-    return fallback
+            if in_frontmatter and ":" in line:
+                key, value = line.split(":", 1)
+                key = key.strip()
+                value = value.strip().strip("'\"")
+                if key in {"name", "description"} and value:
+                    frontmatter[key] = value
+    if "name" in frontmatter and "description" in frontmatter:
+        return frontmatter["name"]
+    return None
 
 
 def validate_skill_name(skill_name, source_path):
@@ -605,7 +626,9 @@ def validate_skill_name(skill_name, source_path):
 def discover_tree_skills(root_dir, full_depth):
     if not full_depth and os.path.isfile(os.path.join(root_dir, "SKILL.md")):
         skill_file = os.path.join(root_dir, "SKILL.md")
-        skill_name = read_skill_name(skill_file, os.path.basename(root_dir))
+        skill_name = read_skill_name(skill_file)
+        if not skill_name:
+            return {}
         return {skill_name: "."}
 
     discovered = {}
@@ -622,7 +645,9 @@ def discover_tree_skills(root_dir, full_depth):
             continue
 
         skill_file = os.path.join(current_dir, "SKILL.md")
-        skill_name = read_skill_name(skill_file, os.path.basename(current_dir))
+        skill_name = read_skill_name(skill_file)
+        if not skill_name:
+            continue
         relative_dir = os.path.relpath(current_dir, root_dir)
         if skill_name in discovered:
             warn(f"duplicate skill name {skill_name!r}; using first occurrence")

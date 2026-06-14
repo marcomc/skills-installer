@@ -598,7 +598,6 @@ def discover_tree_skills(root_dir, full_depth):
     if not full_depth and os.path.isfile(os.path.join(root_dir, "SKILL.md")):
         skill_file = os.path.join(root_dir, "SKILL.md")
         skill_name = read_skill_name(skill_file, os.path.basename(root_dir))
-        validate_skill_name(skill_name, skill_file)
         return {skill_name: "."}
 
     discovered = {}
@@ -613,7 +612,6 @@ def discover_tree_skills(root_dir, full_depth):
 
         skill_file = os.path.join(current_dir, "SKILL.md")
         skill_name = read_skill_name(skill_file, os.path.basename(current_dir))
-        validate_skill_name(skill_name, skill_file)
         relative_dir = os.path.relpath(current_dir, root_dir)
         if skill_name in discovered:
             warn(f"duplicate skill name {skill_name!r}; using first occurrence")
@@ -766,6 +764,11 @@ def make_plan(config):
 
         discovered = discover_source_skills(discovery_source, full_depth)
         skills = selected_skills(discovered, include, exclude, exclude_paths)
+        for skill_name in skills:
+            validate_skill_name(
+                skill_name,
+                os.path.join(discovery_source, discovered[skill_name], "SKILL.md"),
+            )
         if not skills:
             warn(f"source {source!r} selected no skills")
             continue

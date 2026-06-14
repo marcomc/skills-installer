@@ -22,4 +22,4 @@
   resolving to the same final source path.
 - Honor `XDG_CONFIG_HOME` in `make install`.
 - Use neutral placeholder GitHub sources in shipped examples.
-- Reject unsafe local skill names before using them as filesystem paths.
+- Reject unsafe selected local skill names before using them as filesystem paths.

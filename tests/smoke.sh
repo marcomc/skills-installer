@@ -377,6 +377,55 @@ if [[ -e "${home_dir}/.agents/escaped-skill" ]] || [[ -L "${home_dir}/.agents/es
   fail "unsafe skill name escaped canonical directory"
 fi
 
+filtered_source="${tmp_root}/filtered-source"
+filtered_safe_dir="${filtered_source}/safe-skill"
+filtered_unsafe_dir="${filtered_source}/personal/unsafe-skill"
+mkdir -p "${filtered_safe_dir}" "${filtered_unsafe_dir}"
+cat > "${filtered_safe_dir}/SKILL.md" <<'EOF'
+---
+name: safe-skill
+description: Safe filtered smoke-test skill.
+---
+
+# Safe Skill
+EOF
+cat > "${filtered_unsafe_dir}/SKILL.md" <<'EOF'
+---
+name: ../../excluded-skill
+description: Excluded unsafe name smoke-test skill.
+---
+
+# Excluded Unsafe Skill
+EOF
+
+filtered_config="${tmp_root}/filtered-name.conf"
+cat > "${filtered_config}" <<EOF
+canonical_dir = "~/.agents/skills"
+canonical_mode = "symlink"
+default_agents = ["codex"]
+
+[agent_targets]
+codex = "~/.codex/skills"
+
+[[sources]]
+name = "filtered-name"
+source = "${filtered_source}"
+include = ["*"]
+exclude_paths = ["personal"]
+agents = ["codex"]
+EOF
+
+filtered_plan="$(
+  HOME="${home_dir}" \
+  "${repo_root}/install_external_agent_skills.sh" \
+    --config "${filtered_config}" \
+    --list-plan
+)"
+printf '%s\n' "${filtered_plan}" | grep -Fq 'safe-skill' || fail "filtered safe skill missing"
+if printf '%s\n' "${filtered_plan}" | grep -Fq 'excluded-skill'; then
+  fail "excluded unsafe skill appeared in plan"
+fi
+
 full_depth_source="${tmp_root}/full-depth-source"
 mkdir -p "${full_depth_source}/nested/nested-skill"
 cat > "${full_depth_source}/SKILL.md" <<'EOF'

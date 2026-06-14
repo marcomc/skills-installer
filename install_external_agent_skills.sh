@@ -344,7 +344,11 @@ import tempfile
 
 CONFIG_FILE = sys.argv[1]
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
-SKILL_LINE_RE = re.compile(r"^\s*│ {4}([^ ].*?)\s*$")
+SKILL_LINE_RE = re.compile(r"^\s*│(?: {2}| {4})([^ ].*?)\s*$")
+SHALLOW_SKILL_CONTAINERS = {
+    "skills",
+    os.path.join(".agents", "skills"),
+}
 
 DEFAULT_AGENT_TARGETS = {
     "codex": "~/.codex/skills",
@@ -643,8 +647,19 @@ def discover_tree_skills(root_dir, full_depth):
             for name in dir_names
             if name not in {".git", ".hg", ".svn", "node_modules", "__pycache__"}
         ]
-        if not full_depth and os.path.relpath(current_dir, root_dir) != ".":
-            dir_names[:] = []
+        relative_current_dir = os.path.relpath(current_dir, root_dir)
+        if not full_depth and relative_current_dir != ".":
+            if relative_current_dir not in SHALLOW_SKILL_CONTAINERS:
+                current_parts = relative_current_dir.split(os.sep)
+                allowed_children = {
+                    container.split(os.sep)[len(current_parts)]
+                    for container in SHALLOW_SKILL_CONTAINERS
+                    if container.split(os.sep)[: len(current_parts)] == current_parts
+                    and len(container.split(os.sep)) > len(current_parts)
+                }
+                dir_names[:] = [
+                    name for name in dir_names if name in allowed_children
+                ]
 
         if "SKILL.md" not in file_names:
             continue

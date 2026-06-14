@@ -30,3 +30,5 @@
   are set.
 - Skip local `SKILL.md` files that lack required frontmatter.
 - Keep copy-mode dry runs from deleting existing deterministic temp paths.
+- Disable placeholder sources in the installed example config.
+- Allow safe skill names containing spaces.

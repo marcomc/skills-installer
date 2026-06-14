@@ -58,6 +58,7 @@ source_dir=""
 skill_name=""
 agent_name=""
 copy_mode=false
+list_mode=false
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
@@ -76,9 +77,19 @@ while [[ "$#" -gt 0 ]]; do
     --copy)
       copy_mode=true
       ;;
+    --list)
+      list_mode=true
+      ;;
   esac
   shift || true
 done
+
+if [[ "${list_mode}" = true ]]; then
+  printf '│\n'
+  printf '│    Skill With Spaces\n'
+  printf '│      CLI-discovered smoke-test skill.\n'
+  exit 0
+fi
 
 if [[ "${copy_mode}" != true ]] || [[ -z "${source_dir}" ]] || [[ -z "${skill_name}" ]]; then
   printf 'mock npx only supports skills add --copy with --skill\n' >&2
@@ -126,6 +137,8 @@ EOF
 chmod +x "${bin_dir}/npx" "${bin_dir}/cp"
 export MOCK_NPX_LOG="${mock_npx_log}"
 export PATH="${bin_dir}:${PATH}"
+
+HOME="${home_dir}" "${repo_root}/install_external_agent_skills.sh" --config "${repo_root}/config/external-skills.example.conf" --list-plan >/dev/null
 
 cat > "${config_file}" <<EOF
 canonical_dir = "~/.agents/skills"
@@ -581,6 +594,66 @@ printf '%s\n' "${invalid_frontmatter_plan}" | grep -Fq 'valid-frontmatter-skill'
 if printf '%s\n' "${invalid_frontmatter_plan}" | grep -Fq 'invalid-skill'; then
   fail "invalid frontmatter SKILL.md appeared in plan"
 fi
+
+space_name_source="${tmp_root}/space-name-source"
+space_name_skill_dir="${space_name_source}/space-name-skill"
+mkdir -p "${space_name_skill_dir}"
+cat > "${space_name_skill_dir}/SKILL.md" <<'EOF'
+---
+name: Skill With Spaces
+description: Space-name smoke-test skill.
+---
+
+# Skill With Spaces
+EOF
+
+space_name_config="${tmp_root}/space-name.conf"
+cat > "${space_name_config}" <<EOF
+canonical_dir = "~/.agents/skills"
+canonical_mode = "symlink"
+default_agents = ["codex"]
+
+[agent_targets]
+codex = "~/.codex/skills"
+
+[[sources]]
+name = "space-name"
+source = "${space_name_source}"
+include = ["Skill With Spaces"]
+agents = ["codex"]
+EOF
+
+space_name_plan="$(
+  HOME="${home_dir}" \
+  "${repo_root}/install_external_agent_skills.sh" \
+    --config "${space_name_config}" \
+    --list-plan
+)"
+printf '%s\n' "${space_name_plan}" | grep -Fq 'Skill With Spaces' || fail "local skill name with spaces missing"
+
+cli_space_name_config="${tmp_root}/cli-space-name.conf"
+cat > "${cli_space_name_config}" <<'EOF'
+canonical_dir = "~/.agents/skills"
+canonical_mode = "copy"
+default_agents = ["codex"]
+
+[agent_targets]
+codex = "~/.codex/skills"
+
+[[sources]]
+name = "cli-space-name"
+source = "not-a-local-source"
+include = ["Skill With Spaces"]
+agents = ["codex"]
+EOF
+
+cli_space_name_plan="$(
+  HOME="${home_dir}" \
+  "${repo_root}/install_external_agent_skills.sh" \
+    --config "${cli_space_name_config}" \
+    --list-plan
+)"
+printf '%s\n' "${cli_space_name_plan}" | grep -Fq 'Skill With Spaces' || fail "CLI skill name with spaces missing"
 
 shallow_source="${tmp_root}/shallow-source"
 shallow_direct_dir="${shallow_source}/direct-skill"

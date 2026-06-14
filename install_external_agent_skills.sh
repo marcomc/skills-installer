@@ -344,8 +344,7 @@ import tempfile
 
 CONFIG_FILE = sys.argv[1]
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
-SAFE_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
-SKILL_LINE_RE = re.compile(r"^\s*│\s{4}([A-Za-z0-9][A-Za-z0-9_.-]*)\s*$")
+SKILL_LINE_RE = re.compile(r"^\s*│ {4}([^ ].*?)\s*$")
 
 DEFAULT_AGENT_TARGETS = {
     "codex": "~/.codex/skills",
@@ -615,11 +614,17 @@ def read_skill_name(skill_file):
 
 
 def validate_skill_name(skill_name, source_path):
-    if SAFE_SKILL_NAME_RE.match(skill_name):
+    if (
+        skill_name
+        and skill_name not in {".", ".."}
+        and "/" not in skill_name
+        and "\\" not in skill_name
+        and "\0" not in skill_name
+    ):
         return
     raise SystemExit(
         f"error: unsafe skill name {skill_name!r} in {source_path}; "
-        "skill names must match [A-Za-z0-9][A-Za-z0-9_.-]*"
+        "skill names must be one path component without separators"
     )
 
 
@@ -751,6 +756,9 @@ def make_plan(config):
 
     rows = []
     for source_config in sources:
+        if not bool_value(source_config, "enabled", True):
+            continue
+
         source = str(source_config.get("source", "")).strip()
         if not source:
             raise SystemExit("error: every [[sources]] entry needs source = ...")

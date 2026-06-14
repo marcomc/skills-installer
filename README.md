@@ -89,6 +89,7 @@ openclaw = "~/.openclaw/skills"
 [[sources]]
 name = "team-skills"
 source = "example-org/team-skills"
+enabled = false
 canonical_mode = "copy"
 include = ["*"]
 exclude = ["personal", "in-progress", "deprecated"]
@@ -108,6 +109,9 @@ full_depth = true
 `source` accepts the same source formats supported by `skills add`, including
 GitHub shorthand such as `example-org/team-skills`, full Git URLs, and local
 directories.
+
+Set `enabled = true` after replacing placeholder sources with reachable skills
+repositories.
 
 `include`, `exclude`, and `exclude_paths` support exact names and shell-style
 globs. When the source can be inspected as a local or cloneable Git repository,

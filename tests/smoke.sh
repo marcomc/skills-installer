@@ -342,6 +342,41 @@ link_source_plan="$(
 )"
 printf '%s\n' "${link_source_plan}" | grep -Fq 'my-test-skill' || fail "symlink mode did not discover from link_source"
 
+unsafe_source="${tmp_root}/unsafe-source"
+unsafe_skill_dir="${unsafe_source}/unsafe-skill"
+mkdir -p "${unsafe_skill_dir}"
+cat > "${unsafe_skill_dir}/SKILL.md" <<'EOF'
+---
+name: ../../escaped-skill
+description: Unsafe name smoke-test skill.
+---
+
+# Unsafe Skill
+EOF
+
+unsafe_config="${tmp_root}/unsafe-name.conf"
+cat > "${unsafe_config}" <<EOF
+canonical_dir = "~/.agents/skills"
+canonical_mode = "symlink"
+default_agents = ["codex"]
+
+[agent_targets]
+codex = "~/.codex/skills"
+
+[[sources]]
+name = "unsafe-name"
+source = "${unsafe_source}"
+include = ["*"]
+agents = ["codex"]
+EOF
+
+if HOME="${home_dir}" "${repo_root}/install_external_agent_skills.sh" --config "${unsafe_config}" >/dev/null 2>&1; then
+  fail "unsafe skill name was accepted"
+fi
+if [[ -e "${home_dir}/.agents/escaped-skill" ]] || [[ -L "${home_dir}/.agents/escaped-skill" ]]; then
+  fail "unsafe skill name escaped canonical directory"
+fi
+
 full_depth_source="${tmp_root}/full-depth-source"
 mkdir -p "${full_depth_source}/nested/nested-skill"
 cat > "${full_depth_source}/SKILL.md" <<'EOF'

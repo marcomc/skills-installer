@@ -320,6 +320,7 @@ import tempfile
 
 CONFIG_FILE = sys.argv[1]
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+SAFE_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 SKILL_LINE_RE = re.compile(r"^\s*│\s{4}([A-Za-z0-9][A-Za-z0-9_.-]*)\s*$")
 
 DEFAULT_AGENT_TARGETS = {
@@ -584,12 +585,20 @@ def read_skill_name(skill_file, fallback):
     return fallback
 
 
+def validate_skill_name(skill_name, source_path):
+    if SAFE_SKILL_NAME_RE.match(skill_name):
+        return
+    raise SystemExit(
+        f"error: unsafe skill name {skill_name!r} in {source_path}; "
+        "skill names must match [A-Za-z0-9][A-Za-z0-9_.-]*"
+    )
+
+
 def discover_tree_skills(root_dir, full_depth):
     if not full_depth and os.path.isfile(os.path.join(root_dir, "SKILL.md")):
-        skill_name = read_skill_name(
-            os.path.join(root_dir, "SKILL.md"),
-            os.path.basename(root_dir),
-        )
+        skill_file = os.path.join(root_dir, "SKILL.md")
+        skill_name = read_skill_name(skill_file, os.path.basename(root_dir))
+        validate_skill_name(skill_name, skill_file)
         return {skill_name: "."}
 
     discovered = {}
@@ -602,10 +611,9 @@ def discover_tree_skills(root_dir, full_depth):
         if "SKILL.md" not in file_names:
             continue
 
-        skill_name = read_skill_name(
-            os.path.join(current_dir, "SKILL.md"),
-            os.path.basename(current_dir),
-        )
+        skill_file = os.path.join(current_dir, "SKILL.md")
+        skill_name = read_skill_name(skill_file, os.path.basename(current_dir))
+        validate_skill_name(skill_name, skill_file)
         relative_dir = os.path.relpath(current_dir, root_dir)
         if skill_name in discovered:
             warn(f"duplicate skill name {skill_name!r}; using first occurrence")

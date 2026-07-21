@@ -203,7 +203,7 @@ run_cmd_with_home() {
     printf ' %q' "$@"
     printf '\n'
   else
-    env "${env_vars[@]}" "$@"
+    env "${env_vars[@]}" "$@" </dev/null
   fi
 }
 
@@ -935,7 +935,7 @@ run_npx_add_skill() {
   if [[ -n "${home_dir}" ]]; then
     run_cmd_with_home "${home_dir}" "${cmd[@]}"
   else
-    run_cmd "${cmd[@]}"
+    run_cmd "${cmd[@]}" </dev/null
   fi
 }
 

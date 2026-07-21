@@ -13,6 +13,7 @@ Wrapper around `npx --yes skills@latest` for repeatable external skill installs.
 - [Install Workflow](#install-workflow)
 - [Usage](#usage)
 - [Link Topology](#link-topology)
+- [Documentation](#documentation)
 - [Validation](#validation)
 
 ## Purpose
@@ -236,6 +237,12 @@ The second symlink intentionally points to the `~/.agents/skills` symlink, not
 directly to the original repository path.
 
 Existing non-symlink targets are left untouched unless `--force-links` is used.
+
+## Documentation
+
+- [Matt Pocock skills installation and workflow reference](docs/matt-pocock-skills-reference.md)
+  explains how to install or update `mattpocock/skills` through this wrapper and
+  which skill sequence to use for different engineering and learning objectives.
 
 ## Validation
 

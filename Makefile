@@ -9,7 +9,7 @@ CONFIG_FILE := $(CONFIG_DIR)/external-skills.conf
 
 SCRIPT := install_external_agent_skills.sh
 SHELL_FILES := $(SCRIPT) tests/smoke.sh
-MARKDOWN_FILES := README.md CHANGELOG.md TODO.md LICENSE.md
+MARKDOWN_FILES := README.md CHANGELOG.md TODO.md LICENSE.md docs/*.md
 
 .DEFAULT_GOAL := help
 
